@@ -63,7 +63,14 @@ auth = function (req, res, next) {
  * @type {*}
  */
 authAPI = function (req, res, next) {
-    if (!req.session.user) {
+    if (!req.session.user &&
+        !(
+            req.method === "DELETE" &&
+            req.url.indexOf('/api/v0.1/notifications/') === 0 &&
+            typeof req.params.id === 'string' &&
+            req.params.hasOwnProperty('id')
+        )
+    ) {
         // TODO: standardize error format/codes/messages
         var err = { code: 42, message: 'Please login' };
         res.json(401, { error: err });
