@@ -32,6 +32,7 @@ SMTP = {
     }
 };
 
+
 // Mock Sendmail config
 SENDMAIL = {
     transport: 'sendmail',
@@ -39,6 +40,10 @@ SENDMAIL = {
         path: '/nowhere/sendmail'
     }
 };
+
+// Mock Direct config
+DIRECT = {};
+
 
 describe("Mail", function () {
 
@@ -63,9 +68,10 @@ describe("Mail", function () {
             return false;
         });
 
-        sandbox.stub(mailer, "detectSendmail", function () {
-            return when.resolve(fakeSendmail);
-        });
+        // sandbox.stub(mailer, "detectSendmail", function () {
+        //     return when.resolve(fakeSendmail);
+        // });
+
     });
 
     afterEach(function () {
@@ -99,62 +105,26 @@ describe("Mail", function () {
         }).then(null, done);
     });
 
-    it('should fallback to sendmail if no config set', function (done) {
+    it('should fallback to direct if no config set', function (done) {
         fakeConfig.mail = null;
         mailer.init(ghost, config).then(function () {
             mailer.should.have.property('transport');
-            mailer.transport.transportType.should.eql('SENDMAIL');
-            mailer.transport.options.path.should.eql(fakeSendmail);
+            mailer.transport.transportType.should.eql('DIRECT');
+            mailer.transport.dkimOptions.should.be.a.Boolean;
             done();
         }).then(null, done);
     });
 
-    it('should fallback to sendmail if config is empty', function (done) {
+    it('should fallback to direct if config is empty', function (done) {
         fakeConfig.mail = {};
         mailer.init(ghost, config).then(function () {
             mailer.should.have.property('transport');
-            mailer.transport.transportType.should.eql('SENDMAIL');
-            mailer.transport.options.path.should.eql(fakeSendmail);
+            mailer.transport.transportType.should.eql('DIRECT');
+            mailer.transport.dkimOptions.should.be.a.Boolean;
             done();
         }).then(null, done);
     });
 
-    it('should disable transport if config is empty & sendmail not found', function (done) {
-        fakeConfig.mail = {};
-        mailer.detectSendmail.restore();
-        sandbox.stub(mailer, "detectSendmail", when.reject);
-        mailer.init(ghost, config).then(function () {
-            should.not.exist(mailer.transport);
-            done();
-        }).then(null, done);
-    });
-
-    it('should disable transport if config is empty & platform is win32', function (done) {
-        fakeConfig.mail = {};
-        mailer.detectSendmail.restore();
-        mailer.isWindows.restore();
-        sandbox.stub(mailer, 'isWindows', function () {
-            return true;
-        });
-        mailer.init(ghost, config).then(function () {
-            should.not.exist(mailer.transport);
-            done();
-        }).then(null, done);
-    });
-
-    it('should fail to send messages when no transport is set', function (done) {
-        mailer.detectSendmail.restore();
-        sandbox.stub(mailer, "detectSendmail", when.reject);
-        mailer.init(ghost, config).then(function () {
-            mailer.send().then(function () {
-                should.fail();
-                done();
-            }, function (err) {
-                err.should.be.an.instanceOf(Error);
-                done();
-            });
-        });
-    });
 
     it('should fail to send messages when given insufficient data', function (done) {
         when.settle([

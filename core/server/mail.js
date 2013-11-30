@@ -28,52 +28,35 @@ GhostMailer.prototype.init = function (ghost, configModule) {
         return when.resolve();
     }
 
-    // Attempt to detect and fallback to `sendmail`
-    return this.detectSendmail().then(function (binpath) {
-        self.transport = nodemailer.createTransport('sendmail', {
-            path: binpath
-        });
-        self.usingSendmail();
-    }, function () {
-        self.emailDisabled();
-    }).ensure(function () {
-        return when.resolve();
-    });
+    // if the mail isn't configured, fall back to direct transport
+    // Needs nodemailer 0.5.8
+    self.transport = nodemailer.createTransport('direct');
+    self.usingDirect();
+
+    return when.resolve();
 };
 
 GhostMailer.prototype.isWindows = function () {
     return process.platform === 'win32';
 };
 
-GhostMailer.prototype.detectSendmail = function () {
-    if (this.isWindows()) {
-        return when.reject();
-    }
-    return when.promise(function (resolve, reject) {
-        cp.exec('which sendmail', function (err, stdout) {
-            if (err && !/bin\/sendmail/.test(stdout)) {
-                return reject();
-            }
-            resolve(stdout.toString().replace(/(\n|\r|\r\n)$/, ''));
-        });
+GhostMailer.prototype.usingDirect = function () {
+    this.api.notifications.add({
+        type: 'info',
+        message: [
+            "Ghost is attempting to use nodemail's direct transport to send e-mail.",
+            "Keep in mind, because of this, the emails will probably land in your",
+            "spam folder. It is recommended that you explicitly configure an e-mail",
+            "service to avoid that.",
+            "<br>See <a href=\"http://docs.ghost.org/mail\">http://docs.ghost.org/mail</a> for instructions"
+        ].join(' '),
+        status: 'persistent',
+        id: 'ghost-mail-fallback'
     });
 };
 
 GhostMailer.prototype.createTransport = function (config) {
     this.transport = nodemailer.createTransport(config.mail.transport, _.clone(config.mail.options));
-};
-
-GhostMailer.prototype.usingSendmail = function () {
-    this.api.notifications.add({
-        type: 'info',
-        message: [
-            "Ghost is attempting to use your server's <b>sendmail</b> to send e-mail.",
-            "It is recommended that you explicitly configure an e-mail service,",
-            "See <a href=\"http://docs.ghost.org/mail\">http://docs.ghost.org/mail</a> for instructions"
-        ].join(' '),
-        status: 'persistent',
-        id: 'ghost-mail-fallback'
-    });
 };
 
 GhostMailer.prototype.emailDisabled = function () {
@@ -98,7 +81,7 @@ GhostMailer.prototype.send = function (message) {
         return when.reject(new Error('Email Error: Incomplete message data.'));
     }
 
-    var from = this.config().mail.fromaddress || this.ghost.settings('email'),
+    var from = (this.config().mail && this.config().mail.fromaddress) || this.ghost.settings('email'),
         to = message.to || this.ghost.settings('email'),
         sendMail = nodefn.lift(this.transport.sendMail.bind(this.transport));
 
