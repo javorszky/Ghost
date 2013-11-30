@@ -866,7 +866,10 @@ var path           = require('path'),
                 'watch'
             ]);
 
-
+        grunt.registerTask('g',
+            'derp',
+            ['express:dev','watch']
+        );
         // ## Running the test suites
 
         grunt.registerTask('test-unit', 'Run unit tests', ['clean:test', 'setTestEnv', 'loadConfig', 'mochacli:unit']);
