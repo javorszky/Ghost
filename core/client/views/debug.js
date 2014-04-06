@@ -156,17 +156,20 @@
                 }
             }));
         },
-        
+
         handleSendTestMailClick: function (ev) {
             ev.preventDefault();
-        
+
             $.ajax({
                 url: Ghost.paths.apiRoot + '/mail/test/',
                 type: 'POST',
                 headers: {
                     'X-CSRF-Token': $("meta[name='csrf-param']").attr('content')
                 },
-                success: function onSuccess() {
+                success: function onSuccess(response) {
+
+                    console.log('success response', response);
+
                     Ghost.notifications.addItem({
                         type: 'success',
                         message: 'Check your email for the test message.',

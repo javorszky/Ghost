@@ -17,6 +17,7 @@ var _             = require('lodash'),
 // ## Request Handlers
 
 function cacheInvalidationHeader(req, result) {
+    console.log('what is result: ', result);
     //TODO: don't set x-cache-invalidate header for drafts
     var parsedUrl = req._parsedUrl.pathname.replace(/\/$/, '').split('/'),
         method = req.method,
@@ -52,7 +53,9 @@ requestHandler = function (apiMethod) {
             };
 
         return apiMethod.call(apiContext, options).then(function (result) {
-            res.json(result || {});
+            // console.log(apiContext, options, result, 'about to call cacheInvalidationHeader');
+            result = result || {};
+            res.json(result);
             return cacheInvalidationHeader(req, result).then(function (header) {
                 if (header) {
                     res.set({

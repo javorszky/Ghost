@@ -2,8 +2,6 @@ var when     = require("when"),
     config   = require('../config'),
     settings = require('./settings'),
     mail;
-    
-    
 // ## Mail
 mail = {
 
@@ -16,13 +14,11 @@ mail = {
                 subject: postData.subject,
                 html: postData.html
             };
-        
         // **returns:** a promise from the mailer with the number of successfully sent emails
         return mailer.send(message).otherwise(function (error) {
             return when.reject({ code: 500, message: "Unable to send email. " +  error.message });
         });
     },
-    
     // #### SendTest
     // **takes:** nothing
     sendTest: function () {

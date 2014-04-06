@@ -4,7 +4,8 @@ var cp         = require('child_process'),
     nodefn     = require('when/node/function'),
     nodemailer = require('nodemailer'),
     api        = require('./api'),
-    config     = require('./config');
+    config     = require('./config'),
+    url        = require('url');
 
 function GhostMailer(opts) {
     opts = opts || {};
@@ -21,65 +22,71 @@ GhostMailer.prototype.init = function () {
     }
 
     // Attempt to detect and fallback to `sendmail`
-    return this.detectSendmail().then(function (binpath) {
-        self.transport = nodemailer.createTransport('sendmail', {
-            path: binpath
-        });
-        self.usingSendmail();
-    }, function () {
-        self.emailDisabled();
-    }).ensure(function () {
-        return when.resolve();
-    });
+    // return this.detectSendmail().then(function (binpath) {
+    //     self.transport = nodemailer.createTransport('sendmail', {
+    //         path: binpath
+    //     });
+    //     self.usingSendmail();
+    // }, function () {
+    //     self.emailDisabled();
+    // }).ensure(function () {
+    //     return when.resolve();
+    // });
+
+    // Empty options creates Direct transport
+    // https://github.com/andris9/Nodemailer#setting-up-direct-transport
+    self.transport = nodemailer.createTransport();
+
+    when.resolve();
 };
 
-GhostMailer.prototype.isWindows = function () {
-    return process.platform === 'win32';
-};
+// GhostMailer.prototype.isWindows = function () {
+//     return process.platform === 'win32';
+// };
 
-GhostMailer.prototype.detectSendmail = function () {
-    if (this.isWindows()) {
-        return when.reject();
-    }
-    return when.promise(function (resolve, reject) {
-        cp.exec('which sendmail', function (err, stdout) {
-            if (err && !/bin\/sendmail/.test(stdout)) {
-                return reject();
-            }
-            resolve(stdout.toString().replace(/(\n|\r|\r\n)$/, ''));
-        });
-    });
-};
+// GhostMailer.prototype.detectSendmail = function () {
+//     if (this.isWindows()) {
+//         return when.reject();
+//     }
+//     return when.promise(function (resolve, reject) {
+//         cp.exec('which sendmail', function (err, stdout) {
+//             if (err && !/bin\/sendmail/.test(stdout)) {
+//                 return reject();
+//             }
+//             resolve(stdout.toString().replace(/(\n|\r|\r\n)$/, ''));
+//         });
+//     });
+// };
 
 GhostMailer.prototype.createTransport = function () {
     this.transport = nodemailer.createTransport(config().mail.transport, _.clone(config().mail.options) || {});
 };
 
-GhostMailer.prototype.usingSendmail = function () {
-    api.notifications.add({
-        type: 'info',
-        message: [
-            "Ghost is attempting to use your server's <b>sendmail</b> to send e-mail.",
-            "It is recommended that you explicitly configure an e-mail service,",
-            "See <a href=\"http://docs.ghost.org/mail\">http://docs.ghost.org/mail</a> for instructions"
-        ].join(' '),
-        status: 'persistent',
-        id: 'ghost-mail-fallback'
-    });
-};
+// GhostMailer.prototype.usingSendmail = function () {
+//     api.notifications.add({
+//         type: 'info',
+//         message: [
+//             "Ghost is attempting to use your server's <b>sendmail</b> to send e-mail.",
+//             "It is recommended that you explicitly configure an e-mail service,",
+//             "See <a href=\"http://docs.ghost.org/mail\">http://docs.ghost.org/mail</a> for instructions"
+//         ].join(' '),
+//         status: 'persistent',
+//         id: 'ghost-mail-fallback'
+//     });
+// };
 
-GhostMailer.prototype.emailDisabled = function () {
-    api.notifications.add({
-        type: 'warn',
-        message: [
-            "Ghost is currently unable to send e-mail.",
-            "See <a href=\"http://docs.ghost.org/mail\">http://docs.ghost.org/mail</a> for instructions"
-        ].join(' '),
-        status: 'persistent',
-        id: 'ghost-mail-disabled'
-    });
-    this.transport = null;
-};
+// GhostMailer.prototype.emailDisabled = function () {
+//     api.notifications.add({
+//         type: 'warn',
+//         message: [
+//             "Ghost is currently unable to send e-mail.",
+//             "See <a href=\"http://docs.ghost.org/mail\">http://docs.ghost.org/mail</a> for instructions"
+//         ].join(' '),
+//         status: 'persistent',
+//         id: 'ghost-mail-disabled'
+//     });
+//     this.transport = null;
+// };
 
 GhostMailer.prototype.fromAddress = function () {
     var from = config().mail && config().mail.fromaddress,
@@ -99,9 +106,11 @@ GhostMailer.prototype.fromAddress = function () {
 
 // Sends an e-mail message enforcing `to` (blog owner) and `from` fields
 GhostMailer.prototype.send = function (message) {
-    var self = this;
+    var self = this,
+        transport = self.transport,
+        mailStatus = when.defer();
 
-    if (!this.transport) {
+    if (!transport) {
         return when.reject(new Error('Email Error: No e-mail transport configured.'));
     }
     if (!(message && message.subject && message.html)) {
@@ -109,7 +118,10 @@ GhostMailer.prototype.send = function (message) {
     }
 
     return api.settings.read('email').then(function (email) {
-        var to = message.to || email.value;
+        var hostname = (url.parse(config().url).hostname !== 'my-ghost-blog.com') ?
+                        url.parse(config().url).hostname : 'localhost',
+            from = (config().mail && config().mail.fromaddress) || 'ghost@' + hostname,
+            to = message.to || self.ghost.settings('email');
 
         message = _.extend(message, {
             from: self.fromAddress(),
@@ -117,13 +129,41 @@ GhostMailer.prototype.send = function (message) {
             generateTextFromHTML: true
         });
     }).then(function () {
-        var sendMail = nodefn.lift(self.transport.sendMail.bind(self.transport));
-        return sendMail(message);
+        var sendMail = nodefn.lift(transport.sendMail.bind(self.transport));
+
+        sendMail(message, function (error, response) {
+
+            if (error) {
+                mailStatus.reject(new Error(error));
+            }
+
+            response.statusHandler.once("failed", function (data) {
+                var reason = '';
+                console.log('this is failed', data);
+                if (data.error.errno === "ENOTFOUND") {
+                    reason = 'there is no mail server at this address.';
+                }
+
+                mailStatus.reject(new Error("Permanently failed delivering the mail because: " + reason));
+            });
+
+            response.statusHandler.once("requeue", function (data) {
+                console.log('req', data);
+                mailStatus.reject(new Error("Message did not send, requed. Probably will not be sent. :( \nMore info: " + data.error.message));
+            });
+
+            response.statusHandler.once("sent", function (data) {
+                console.log('this is sent', data);
+                mailStatus.resolve("Message was accepted by your mail server. Check your inbox or spam folder. :)");
+            });
+        });
     }).otherwise(function (error) {
         // Proxy the error message so we can add 'Email Error:' to the beginning to make it clearer.
         error =  _.isString(error) ? 'Email Error:' + error : (_.isObject(error) ? 'Email Error: ' + error.message : 'Email Error: Unknown Email Error');
-        return when.reject(new Error(error));
+        mailStatus.reject(new Error(error));
     });
+
+    return mailStatus.promise;
 };
 
 module.exports = new GhostMailer();
