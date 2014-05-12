@@ -23,10 +23,7 @@ mail = {
                 });
             })
             .otherwise(function (error) {
-                delete postData.mail[0].options;
-                postData.mail[0].status = new errors.EmailError(error.message);
-                console.log('this is postData error', postData);
-                return when.reject(postData);
+                return when.reject(new errors.EmailError(error.message));
             });
     },
     // #### SendTest
