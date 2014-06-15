@@ -83,6 +83,8 @@ GhostMailer.prototype.send = function (message) {
     message = message || {};
     to = message.to || false;
 
+    console.log('this is the transport in mailer: ', self.transport);
+
     if (!this.transport) {
         return when.reject(new Error('Email Error: No e-mail transport configured.'));
     }
