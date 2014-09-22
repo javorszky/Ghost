@@ -64,8 +64,7 @@ var PostSettingsMenuController = Ember.ObjectController.extend({
             .extend(Ember.PromiseProxyMixin)
             .create(deferred);
     }),
-    //Changes in the PSM are too minor to warrant NProgress firing
-    saveOptions: {disableNProgress: true},
+
     /**
      * The placeholder is the published date of the post,
      * or the current date if the pubdate has not been set.
